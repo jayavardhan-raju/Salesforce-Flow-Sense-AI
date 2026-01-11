@@ -1,0 +1,5 @@
+{
+  "name": "FlowSense AI",
+  "description": "Understand any Salesforce org in 60 seconds. Visual dependency analysis and AI-powered architect insights.",
+  "requestFramePermissions": []
+}
