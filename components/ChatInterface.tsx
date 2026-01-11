@@ -1,28 +1,54 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Copy, RotateCcw, Sparkles, Star, MessageSquare } from 'lucide-react';
-import { ChatMessage, GraphNode } from '../types';
+import { Send, Copy, RotateCcw, Sparkles, Star, MessageSquare, AlertCircle, Maximize2, Minimize2 } from 'lucide-react';
+import { ChatMessage, GraphData } from '../types';
 import { sendMessageToGemini } from '../services/geminiService';
-import { MOCK_SUGGESTIONS } from '../constants';
 
 interface ChatInterfaceProps {
-  initialQuery?: string;
+  initialQuery?: { text: string; id: number } | null;
   onSuggestionClick?: (query: string) => void;
+  graphData: GraphData;
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialQuery, onSuggestionClick }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+    initialQuery, 
+    onSuggestionClick, 
+    graphData,
+    isExpanded,
+    onToggleExpand
+}) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [favorites, setFavorites] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'chat' | 'favorites'>('chat');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const lastProcessedQueryRef = useRef<string | undefined>(undefined);
-
+  
+  // Load favorites from local storage on mount
   useEffect(() => {
-    if (initialQuery && initialQuery !== lastProcessedQueryRef.current) {
-        lastProcessedQueryRef.current = initialQuery;
-        setView('chat'); // Switch back to chat if a new query comes in
-        handleSend(initialQuery);
+    const savedFavorites = localStorage.getItem('flowSenseFavorites');
+    if (savedFavorites) {
+        try {
+            setFavorites(JSON.parse(savedFavorites));
+        } catch (e) {
+            console.error("Failed to parse favorites", e);
+        }
+    }
+  }, []);
+
+  // Save favorites when updated
+  useEffect(() => {
+    localStorage.setItem('flowSenseFavorites', JSON.stringify(favorites));
+  }, [favorites]);
+
+  // Handle external query trigger
+  useEffect(() => {
+    if (initialQuery) {
+        setView('chat'); 
+        handleSend(initialQuery.text);
     }
   }, [initialQuery]);
 
@@ -32,11 +58,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialQuery, onSuggestio
 
   useEffect(() => {
     if (view === 'chat') scrollToBottom();
-  }, [messages, view]);
+  }, [messages, view, isLoading]);
 
   const handleSend = async (text: string = input) => {
     if (!text.trim()) return;
 
+    setError(null);
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -48,17 +75,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialQuery, onSuggestio
     setInput('');
     setIsLoading(true);
 
-    const responseText = await sendMessageToGemini(text, messages.map(m => ({role: m.role, content: m.content})));
+    try {
+        const responseText = await sendMessageToGemini(
+            text, 
+            messages.map(m => ({role: m.role, content: m.content})),
+            graphData
+        );
+        
+        const aiMsg: ChatMessage = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: responseText,
+          timestamp: new Date()
+        };
 
-    const aiMsg: ChatMessage = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: responseText,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, aiMsg]);
-    setIsLoading(false);
+        setMessages(prev => [...prev, aiMsg]);
+    } catch (e) {
+        setError("Failed to get response from AI. Please check your connection or try again.");
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -68,17 +104,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialQuery, onSuggestio
     }
   };
 
-  const toggleFavorite = (id: string) => {
-    setMessages(prev => prev.map(msg => 
-        msg.id === id ? { ...msg, isFavorite: !msg.isFavorite } : msg
-    ));
+  const toggleFavorite = (msg: ChatMessage) => {
+    setFavorites(prev => {
+        const exists = prev.find(f => f.id === msg.id);
+        if (exists) {
+            return prev.filter(f => f.id !== msg.id);
+        } else {
+            return [...prev, { ...msg, isFavorite: true }];
+        }
+    });
+    
+    // Also update current messages state to reflect visual change if needed
+    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isFavorite: !m.isFavorite } : m));
   };
 
-  const favoriteMessages = messages.filter(m => m.isFavorite);
+  const isFavorite = (id: string) => {
+      return favorites.some(f => f.id === id);
+  };
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Tab Switcher */}
+      {/* Tab Switcher & Header Controls */}
       <div className="flex border-b border-gray-200">
         <button 
             onClick={() => setView('chat')}
@@ -90,20 +136,42 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialQuery, onSuggestio
             onClick={() => setView('favorites')}
             className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-2 ${view === 'favorites' ? 'text-sf-blue border-b-2 border-sf-blue' : 'text-gray-500 hover:text-gray-700'}`}
         >
-            <Star className="w-3 h-3" /> Favorites ({favoriteMessages.length})
+            <Star className="w-3 h-3" /> Favorites ({favorites.length})
         </button>
+        
+        {/* Expand Button in Header */}
+        {onToggleExpand && (
+            <button 
+                onClick={onToggleExpand}
+                className="px-3 border-l border-gray-100 text-gray-400 hover:text-sf-blue hover:bg-gray-50 transition-colors"
+                title={isExpanded ? "Minimize Chat" : "Expand Chat"}
+            >
+                {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+        )}
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {view === 'favorites' && favoriteMessages.length === 0 && (
-            <div className="text-center text-gray-400 mt-10 text-sm">
-                <Star className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                No favorites saved yet.
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 relative">
+        {/* Error Banner */}
+        {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md text-xs flex items-center gap-2 animate-in fade-in slide-in-from-top-2 absolute top-2 left-2 right-2 z-10 shadow-sm">
+                <AlertCircle className="w-4 h-4" />
+                {error}
             </div>
         )}
 
-        {(view === 'chat' ? messages : favoriteMessages).map((msg) => (
+        {view === 'favorites' && favorites.length === 0 && (
+            <div className="text-center text-gray-400 mt-10 text-sm flex flex-col items-center">
+                <div className="bg-gray-50 p-4 rounded-full mb-3">
+                    <Star className="w-6 h-6 text-gray-300" />
+                </div>
+                <p>No favorites saved yet.</p>
+                <p className="text-xs mt-1">Star any message in chat to save it here.</p>
+            </div>
+        )}
+
+        {(view === 'chat' ? messages : favorites).map((msg) => (
           <div
             key={msg.id}
             className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -135,11 +203,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ initialQuery, onSuggestio
                     </>
                   )}
                    <button 
-                        onClick={() => toggleFavorite(msg.id)}
-                        className={`text-xs flex items-center gap-1 transition-colors ${msg.isFavorite ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`}
-                        title="Save to Favorites"
+                        onClick={() => toggleFavorite(msg)}
+                        className={`text-xs flex items-center gap-1 transition-colors ${isFavorite(msg.id) ? 'text-yellow-500' : 'text-gray-400 hover:text-yellow-500'}`}
+                        title={isFavorite(msg.id) ? "Remove from Favorites" : "Save to Favorites"}
                    >
-                        <Star className="w-3 h-3" fill={msg.isFavorite ? "currentColor" : "none"} />
+                        <Star className="w-3 h-3" fill={isFavorite(msg.id) ? "currentColor" : "none"} />
                    </button>
               </div>
             </div>

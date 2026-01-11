@@ -1,77 +1,48 @@
 import { GoogleGenAI } from "@google/genai";
-import { MOCK_GRAPH_DATA } from "../constants";
+import { GraphData } from "../types";
 
 // Initialize Gemini Client
 const apiKey = process.env.API_KEY || ''; 
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
-const getMockResponse = (message: string): string => {
-  const lowerMsg = message.toLowerCase();
-  
-  if (lowerMsg.includes('execution order') || lowerMsg.includes('account update')) {
-    return `**Execution Order Analysis for Account Update:**
-
-1. **Before Triggers**: \`Acc_Before_Update\` (Checks data integrity)
-2. **Before-Save Flows**: \`Account_Standardization_Flow\`
-3. **Validation Rules**: \`Close_Date_Rule\` (Active)
-4. **After-Save Flows**: \`Update_Opp_Amount\` (Updates related Opportunities)
-5. **After Triggers**: \`Acc_After_Update\` (Syncs to ERP)
-6. **Assignment Rules**: None active
-
-**Impact Note**: The \`Acc_After_Update\` trigger consumes 40% of the transaction limit due to the sync operation. Consider moving this to an asynchronous path if volume increases.`;
-  }
-
-  if (lowerMsg.includes('opportunity amount') || lowerMsg.includes('impact')) {
-    return `**Impact Analysis: Opportunity Amount Field**
-
-Modifying or deleting this field will cause **3 Breaking Changes**:
-
-1. **Flow**: \`Update_Opp_Amount\` - Directly references this field for calculation.
-2. **Trigger**: \`Opp_Stage_Change\` - Checks amount threshold before allowing stage progression.
-3. **Report**: \`Quarterly_Revenue_Pipeline\` - This field is a grouping column.
-
-**Recommendation**: Deprecate the field first by removing it from page layouts before hard deletion.`;
-  }
-
-  if (lowerMsg.includes('validation rule')) {
-    return `**Validation Rule Analysis: Close_Date_Rule**
-
-**Error Condition**: \`ISCHANGED(CloseDate) && CloseDate < TODAY() && NOT($Permission.Bypass_Rules)\`
-
-**Why it fails**: This rule prevents backdating Opportunities. It is failing because your update tries to set \`CloseDate\` to yesterday.
-
-**Dependencies**:
-- Referenced by Flow: \`Opp_Stage_Change\`
-- Impacted by: User Profile Permissions`;
-  }
-
-  return `Based on the metadata analysis, this component has dependencies on **${MOCK_GRAPH_DATA.nodes.slice(0, 3).map(n => n.label).join(', ')}**. 
-
-I recommend running a full dependency check before making changes. The current implementation uses a mix of Flows and Triggers which may cause recursion if not carefully managed.`;
+// Helper to format graph for prompt
+const formatGraphForPrompt = (data: GraphData): string => {
+    const nodes = data.nodes.slice(0, 50).map(n => `- ${n.label} (${n.group})`).join('\n');
+    const links = data.links.slice(0, 50).map(l => {
+        const source = typeof l.source === 'object' ? (l.source as any).id : l.source;
+        const target = typeof l.target === 'object' ? (l.target as any).id : l.target;
+        return `- ${source} -> ${target} (${l.type})`;
+    }).join('\n');
+    return `Nodes:\n${nodes}\n\nLinks:\n${links}`;
 };
 
 export const sendMessageToGemini = async (
   message: string, 
-  history: { role: string; content: string }[]
+  history: { role: string; content: string }[],
+  graphData: GraphData
 ): Promise<string> => {
   // Fallback if no API key is present
   if (!ai) {
-    console.warn("Gemini API Key missing, using mock response.");
-    return getMockResponse(message);
+    console.warn("Gemini API Key missing.");
+    return "API Key missing. I cannot process your request without a valid API key.";
   }
 
   try {
+    const graphContext = formatGraphForPrompt(graphData);
+    
     const context = `
       You are FlowSense AI, a Salesforce Architect assistant.
-      You have access to the following org metadata graph:
-      Nodes: ${MOCK_GRAPH_DATA.nodes.map(n => `${n.label} (${n.group})`).join(', ')}
-      Links: ${MOCK_GRAPH_DATA.links.map(l => `${l.source} -> ${l.target} (${l.type})`).join(', ')}
+      You have access to the following REAL metadata graph from the user's org:
+      
+      ${graphContext}
       
       User Question: ${message}
       
-      Provide a concise, professional answer. Explain dependencies clearly.
-      If the user asks about impact, list specific components from the graph.
-      Format with Markdown.
+      Provide a concise, professional answer. 
+      - Explain dependencies clearly based ONLY on the provided graph data.
+      - If the graph data is empty or missing the component asked about, state that clearly.
+      - If the user asks about impact, list specific components from the provided links.
+      - Format with Markdown.
     `;
 
     // Use recommended model for text tasks
@@ -84,10 +55,9 @@ export const sendMessageToGemini = async (
       ]
     });
 
-    return response.text || getMockResponse(message);
+    return response.text || "I couldn't generate a response based on the current data.";
   } catch (error) {
-    console.warn("Gemini API Error (falling back to mock):", error);
-    // Fallback to mock response on error to ensure demo continuity
-    return getMockResponse(message);
+    console.warn("Gemini API Error:", error);
+    return "I encountered an error communicating with the AI service.";
   }
 };

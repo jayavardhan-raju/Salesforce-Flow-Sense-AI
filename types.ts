@@ -1,5 +1,6 @@
 export enum AppView {
   TUTORIAL = 'TUTORIAL',
+  LOGIN = 'LOGIN',
   SCANNING = 'SCANNING',
   DASHBOARD = 'DASHBOARD',
   IMPACT_ANALYSIS = 'IMPACT_ANALYSIS'
@@ -7,15 +8,21 @@ export enum AppView {
 
 export interface GraphNode {
   id: string;
-  group: 'Object' | 'Flow' | 'Trigger' | 'Field';
+  group: string; // Dynamic group type
   label: string;
   val: number; // For radius size
+  metadata?: {
+    apiName?: string;
+    recordId?: string;
+    parentApiName?: string;
+    type?: string;
+  };
 }
 
 export interface GraphLink {
   source: string;
   target: string;
-  type: 'reference' | 'update' | 'trigger';
+  type: 'reference' | 'update' | 'trigger' | 'dependency';
 }
 
 export interface GraphData {
