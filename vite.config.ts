@@ -7,20 +7,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        // Use resolve('index.tsx') to resolve relative to CWD, avoiding __dirname issues
-        index: resolve('index.tsx'),
-      },
-      output: {
-        entryFileNames: 'index.js',
-        format: 'iife', // Immediately Invoked Function Expression for isolation
-        name: 'FlowSenseExtension',
-        // Bundle all dependencies into the single file
-        inlineDynamicImports: true,
-        extend: true
-      }
-    }
+    // Removed rollupOptions that forced IIFE/JS-only output to allow standard Web App build with index.html
   },
   define: {
     'process.env.NODE_ENV': '"production"',
