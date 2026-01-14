@@ -192,7 +192,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             >
               {msg.role === 'assistant' && (
                 <div className={`flex items-center gap-1 mb-1 text-xs font-bold uppercase tracking-wider ${isProcessMode ? 'text-purple-600' : 'text-sf-blue'}`}>
-                  <Sparkles className="w-3 h-3" /> {isProcessMode ? 'Process Mining Agent' : 'FlowSense AI'}
+                  <Sparkles className="w-3 h-3" /> {isProcessMode ? 'Process Mining Agent' : 'Salesforce FlowSense AI'}
                 </div>
               )}
               <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>

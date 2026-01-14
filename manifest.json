@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "FlowSense AI for Salesforce",
+  "name": "Salesforce FlowSense AI",
   "version": "1.0.0",
   "description": "Understand any Salesforce org in 60 seconds. Visual dependency analysis and AI-powered architect insights.",
   "permissions": [

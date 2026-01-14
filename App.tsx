@@ -88,7 +88,7 @@ const App: React.FC = () => {
                     <div className="w-8 h-8 bg-sf-blue rounded-lg flex items-center justify-center shadow-sm">
                         <span className="text-white font-bold text-lg">F</span>
                     </div>
-                    <h1 className="font-bold text-gray-900 dark:text-white text-lg tracking-tight">FlowSense AI</h1>
+                    <h1 className="font-bold text-gray-900 dark:text-white text-lg tracking-tight">Salesforce FlowSense AI</h1>
                     <span className="px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-sf-blue dark:text-blue-300 text-xs font-medium border border-blue-100 dark:border-blue-800">Enterprise</span>
                 </div>
                 
@@ -127,13 +127,11 @@ const App: React.FC = () => {
         {/* Main Content Area */}
         <main className="flex-1 overflow-hidden relative flex flex-col">
             {currentView === AppView.TUTORIAL && (
-                <div className="max-w-4xl mx-auto w-full h-full flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-gray-100 dark:border-slate-700">
-                        <Tutorial 
-                            onComplete={handleTutorialComplete} 
-                            onSkip={() => setCurrentView(AppView.LOGIN)}
-                        />
-                    </div>
+                <div className="w-full h-full overflow-hidden">
+                    <Tutorial 
+                        onComplete={handleTutorialComplete} 
+                        onSkip={() => setCurrentView(AppView.LOGIN)}
+                    />
                 </div>
             )}
 

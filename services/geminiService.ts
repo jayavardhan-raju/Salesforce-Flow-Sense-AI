@@ -25,7 +25,7 @@ export const sendMessageToGemini = async (
     const graphContext = formatGraphForPrompt(graphData);
     
     let systemInstruction = `
-      You are FlowSense AI, a Salesforce Architect assistant.
+      You are Salesforce FlowSense AI, a Salesforce Architect assistant.
       You have access to the following REAL metadata graph from the user's org:
       
       ${graphContext}
