@@ -3,7 +3,9 @@ export enum AppView {
   LOGIN = 'LOGIN',
   SCANNING = 'SCANNING',
   DASHBOARD = 'DASHBOARD',
-  IMPACT_ANALYSIS = 'IMPACT_ANALYSIS'
+  IMPACT_ANALYSIS = 'IMPACT_ANALYSIS',
+  PROCESS_MINING = 'PROCESS_MINING',
+  PROCESS_DIAGRAM = 'PROCESS_DIAGRAM'
 }
 
 export interface GraphNode {
@@ -11,6 +13,7 @@ export interface GraphNode {
   group: string; // Dynamic group type
   label: string;
   val: number; // For radius size
+  level?: number; // For Process Tree Layout
   metadata?: {
     apiName?: string;
     recordId?: string;
@@ -22,7 +25,7 @@ export interface GraphNode {
 export interface GraphLink {
   source: string;
   target: string;
-  type: 'reference' | 'update' | 'trigger' | 'dependency';
+  type: 'reference' | 'update' | 'trigger' | 'dependency' | 'process_step';
 }
 
 export interface GraphData {
@@ -44,4 +47,29 @@ export interface ScanStep {
   label: string;
   status: 'pending' | 'scanning' | 'completed';
   count?: number;
+}
+
+export interface ExecutionStep {
+  id: string;
+  label: string;
+  type: 'Start' | 'Decision' | 'Assignment' | 'RecordUpdate' | 'ApexAction' | 'SubFlow' | 'End' | 'Loop' | 'Action';
+  description?: string;
+  outcome?: string; 
+  next?: string[]; // IDs of next steps
+  issues?: string[]; // Potential conflicts
+  meta?: any;
+}
+
+export interface ExecutionPath {
+  flowId: string;
+  flowName: string;
+  steps: ExecutionStep[];
+}
+
+export interface ProcessMiningConfig {
+    question: string;
+    diagramName: string;
+    selectedObject: string;
+    recordType: string;
+    picklistField: string;
 }

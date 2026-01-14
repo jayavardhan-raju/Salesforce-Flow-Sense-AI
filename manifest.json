@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "FlowSense AI for Salesforce",
+  "version": "1.0.0",
+  "description": "Understand any Salesforce org in 60 seconds. Visual dependency analysis and AI-powered architect insights.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.force.com/*",
+    "https://*.lightning.force.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.salesforce.com/*",
+        "https://*.force.com/*",
+        "https://*.lightning.force.com/*"
+      ],
+      "js": ["index.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

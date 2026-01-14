@@ -25,6 +25,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<'chat' | 'favorites'>('chat');
   
+  // Basic check to see if we are in process mode based on graph data context (simplification)
+  // In a real app, this should be a prop, but here we infer it if nodes contain 'State' or 'Action' groups
+  const isProcessMode = graphData.nodes.some(n => n.group === 'State' || n.group === 'Action');
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Load favorites from local storage on mount
@@ -79,7 +83,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         const responseText = await sendMessageToGemini(
             text, 
             messages.map(m => ({role: m.role, content: m.content})),
-            graphData
+            graphData,
+            isProcessMode
         );
         
         const aiMsg: ChatMessage = {
@@ -125,7 +130,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className="flex flex-col h-full bg-white">
       {/* Tab Switcher & Header Controls */}
-      <div className="flex border-b border-gray-200">
+      <div className={`flex border-b border-gray-200 ${isProcessMode ? 'bg-purple-50' : 'bg-white'}`}>
         <button 
             onClick={() => setView('chat')}
             className={`flex-1 py-2 text-xs font-medium flex items-center justify-center gap-2 ${view === 'chat' ? 'text-sf-blue border-b-2 border-sf-blue' : 'text-gray-500 hover:text-gray-700'}`}
@@ -180,12 +185,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               className={`max-w-[85%] rounded-lg p-3 text-sm shadow-sm relative group ${
                 msg.role === 'user'
                   ? 'bg-gray-100 text-gray-800 rounded-br-none'
-                  : 'bg-sf-light text-gray-800 border border-blue-100 rounded-bl-none'
+                  : isProcessMode && msg.role === 'assistant' 
+                        ? 'bg-purple-50 text-gray-800 border border-purple-100 rounded-bl-none'
+                        : 'bg-sf-light text-gray-800 border border-blue-100 rounded-bl-none'
               }`}
             >
               {msg.role === 'assistant' && (
-                <div className="flex items-center gap-1 mb-1 text-xs text-sf-blue font-bold uppercase tracking-wider">
-                  <Sparkles className="w-3 h-3" /> FlowSense AI
+                <div className={`flex items-center gap-1 mb-1 text-xs font-bold uppercase tracking-wider ${isProcessMode ? 'text-purple-600' : 'text-sf-blue'}`}>
+                  <Sparkles className="w-3 h-3" /> {isProcessMode ? 'Process Mining Agent' : 'FlowSense AI'}
                 </div>
               )}
               <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
@@ -216,7 +223,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         
         {view === 'chat' && isLoading && (
            <div className="flex justify-start">
-             <div className="bg-sf-light border border-blue-100 rounded-lg rounded-bl-none p-3 shadow-sm">
+             <div className={`border border-blue-100 rounded-lg rounded-bl-none p-3 shadow-sm ${isProcessMode ? 'bg-purple-50' : 'bg-sf-light'}`}>
                 <div className="flex space-x-1">
                     <div className="w-2 h-2 bg-sf-blue/50 rounded-full animate-bounce"></div>
                     <div className="w-2 h-2 bg-sf-blue/50 rounded-full animate-bounce delay-100"></div>
@@ -237,7 +244,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder="Ask a question about your metadata..."
+                placeholder={isProcessMode ? "Ask about process steps, owners, or gaps..." : "Ask a question about your metadata..."}
                 className="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sf-blue focus:border-transparent text-sm transition-shadow"
             />
             <button

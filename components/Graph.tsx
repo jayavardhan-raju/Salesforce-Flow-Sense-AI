@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { GraphData, GraphNode, GraphLink } from '../types';
-import { Filter, RotateCw, Maximize2, Minimize2, FileText, Printer, Search, Camera, X } from 'lucide-react';
+import { Filter, RotateCw, Maximize2, Minimize2, FileText, Printer, Search, Camera, X, Play } from 'lucide-react';
 
 interface GraphProps {
   data: GraphData;
   onNodeClick: (node: GraphNode) => void;
+  onNodeContextMenu?: (event: React.MouseEvent, node: GraphNode) => void;
   width: number;
   height: number;
   activeFilters: string[];
@@ -13,18 +14,23 @@ interface GraphProps {
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   onExport?: (type: 'pdf' | 'word') => void;
+  onTraceExecution?: (node: GraphNode) => void;
+  layoutMode?: 'force' | 'tree'; // New prop for layout type
 }
 
 const Graph: React.FC<GraphProps> = ({ 
     data, 
     onNodeClick, 
+    onNodeContextMenu,
     width, 
     height, 
     activeFilters, 
     onToggleFilter,
-    isExpanded,
+    isExpanded, 
     onToggleExpand,
-    onExport
+    onExport,
+    onTraceExecution,
+    layoutMode = 'force'
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -76,11 +82,27 @@ const Graph: React.FC<GraphProps> = ({
 
     const g = svg.append("g");
 
-    const simulation = d3.forceSimulation(filteredNodes as d3.SimulationNodeDatum[])
-      .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(120))
-      .force("charge", d3.forceManyBody().strength(-400))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide().radius(40));
+    // Configure Simulation based on Layout Mode
+    let simulation: d3.Simulation<d3.SimulationNodeDatum, undefined>;
+
+    if (layoutMode === 'tree') {
+         // Process/Tree Layout: Left-to-Right flow based on 'level'
+         simulation = d3.forceSimulation(filteredNodes as d3.SimulationNodeDatum[])
+            .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(150))
+            .force("charge", d3.forceManyBody().strength(-300))
+            .force("collide", d3.forceCollide().radius(50))
+            // Strong X force based on level to create columns
+            .force("x", d3.forceX((d: any) => (d.level || 0) * 180 + 100).strength(2))
+            // Weak Y force to center vertically but allow spread
+            .force("y", d3.forceY(height / 2).strength(0.1));
+    } else {
+         // Default Force Directed Graph
+         simulation = d3.forceSimulation(filteredNodes as d3.SimulationNodeDatum[])
+            .force("link", d3.forceLink(filteredLinks).id((d: any) => d.id).distance(120))
+            .force("charge", d3.forceManyBody().strength(-400))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("collide", d3.forceCollide().radius(40));
+    }
 
     // Markers
     g.append("defs").selectAll("marker")
@@ -88,7 +110,7 @@ const Graph: React.FC<GraphProps> = ({
       .enter().append("marker")
       .attr("id", "arrow")
       .attr("viewBox", "0 -5 10 10")
-      .attr("refX", 25)
+      .attr("refX", layoutMode === 'tree' ? 80 : 25) // Adjust arrow position for rectangles vs circles
       .attr("refY", 0)
       .attr("markerWidth", 6)
       .attr("markerHeight", 6)
@@ -97,15 +119,17 @@ const Graph: React.FC<GraphProps> = ({
       .attr("d", "M0,-5L10,0L0,5")
       .attr("fill", "#94a3b8");
 
+    // Links (Curved for Tree, Straight for Force)
     const link = g.append("g")
       .attr("stroke", "#cbd5e1")
       .attr("stroke-opacity", 0.6)
-      .selectAll("line")
+      .selectAll("path") // Use path for curves
       .data(filteredLinks)
-      .join("line")
+      .join("path")
       .attr("class", "link") 
       .attr("stroke-width", 1.5)
-      .attr("marker-end", "url(#arrow)");
+      .attr("marker-end", "url(#arrow)")
+      .attr("fill", "none");
 
     const node = g.append("g")
       .selectAll("g")
@@ -143,7 +167,6 @@ const Graph: React.FC<GraphProps> = ({
         node.filter((n: any) => neighborIds.has(n.id)).transition().duration(200).attr("opacity", 1);
     })
     .on("mouseout", function() {
-        // Restore state based on search query ref (avoids stale closure)
         if (searchQueryRef.current) {
              applySearchHighlight(searchQueryRef.current);
         } else {
@@ -156,51 +179,89 @@ const Graph: React.FC<GraphProps> = ({
     node.each(function(d: any) {
       const el = d3.select(this);
       
-      let color = "#cbd5e1"; // default gray
+      let color = "#cbd5e1"; 
       if (d.group === 'Object') color = "#0176D3";
       else if (d.group === 'Flow') color = "#9333ea";
       else if (d.group === 'Trigger') color = "#f97316";
       else if (d.group === 'ValidationRule' || d.group === 'Field') color = "#ef4444";
       else if (d.group === 'ApexClass') color = "#64748b";
-      else if (d.group === 'LWC') color = "#06b6d4";
-      else if (d.group === 'Aura') color = "#14b8a6";
-      else if (d.group === 'Visualforce') color = "#4f46e5";
+      else if (d.group === 'Start') color = "#22c55e";
+      else if (d.group === 'State') color = "#ffffff";
+      else if (d.group === 'Action') color = "#eab308";
+      else if (d.group === 'Role') color = "#f0f9ff";
 
-      if (d.group === 'Trigger') {
-          el.append("rect").attr("width", 20).attr("height", 20).attr("x", -10).attr("y", -10).attr("fill", color);
-      } else if (d.group === 'Object') {
-          el.append("circle").attr("r", 15).attr("fill", color);
+      if (layoutMode === 'tree') {
+          // Render Rectangles for Process Diagram
+          el.append("rect")
+            .attr("width", 120)
+            .attr("height", 40)
+            .attr("x", -60)
+            .attr("y", -20)
+            .attr("rx", 4)
+            .attr("ry", 4)
+            .attr("fill", color)
+            .attr("stroke", d.group === 'State' || d.group === 'Role' ? "#94a3b8" : "none")
+            .attr("stroke-width", d.group === 'State' ? 1 : 0)
+            .attr("filter", "drop-shadow(0px 1px 2px rgba(0,0,0,0.1))");
+
       } else {
-          el.append("circle").attr("r", d.group === 'Flow' ? 12 : 8).attr("fill", color);
+          // Render Circles for Force Graph
+          if (d.group === 'Trigger') {
+              el.append("rect").attr("width", 20).attr("height", 20).attr("x", -10).attr("y", -10).attr("fill", color);
+          } else if (d.group === 'Object') {
+              el.append("circle").attr("r", 15).attr("fill", color);
+          } else {
+              el.append("circle").attr("r", d.group === 'Flow' ? 12 : 8).attr("fill", color);
+          }
       }
     });
 
+    // Labels
     node.append("text")
       .attr("class", "node-text")
-      .attr("dx", 18)
-      .attr("dy", 4)
+      .attr("dx", layoutMode === 'tree' ? 0 : 18)
+      .attr("dy", layoutMode === 'tree' ? 4 : 4)
       .text((d: any) => d.label)
-      .attr("font-size", "10px")
-      .attr("font-family", "sans-serif")
-      .attr("fill", "#334155")
+      .attr("font-size", layoutMode === 'tree' ? "11px" : "10px")
+      .attr("font-family", "Inter, sans-serif")
+      .attr("fill", (d: any) => layoutMode === 'tree' && d.group !== 'State' && d.group !== 'Role' ? "#ffffff" : "#334155")
+      .attr("text-anchor", layoutMode === 'tree' ? "middle" : "start")
       .style("pointer-events", "none")
-      .attr("paint-order", "stroke")
-      .attr("stroke", "white")
-      .attr("stroke-width", 3);
+      // Truncate long text for boxes
+      .each(function(d: any) {
+          if (layoutMode === 'tree' && d.label.length > 18) {
+              d3.select(this).text(d.label.substring(0, 16) + '...');
+          }
+      });
 
     node.on("click", (event, d: any) => {
       onNodeClick(d);
     });
+    
+    node.on("contextmenu", (event, d: any) => {
+        event.preventDefault();
+        if (onNodeContextMenu) {
+            onNodeContextMenu(event, d);
+        }
+    });
 
     simulation.on("tick", () => {
-      link
-        .attr("x1", (d: any) => d.source.x)
-        .attr("y1", (d: any) => d.source.y)
-        .attr("x2", (d: any) => d.target.x)
-        .attr("y2", (d: any) => d.target.y);
+      if (layoutMode === 'tree') {
+          // Curved links for tree layout
+          link.attr("d", (d: any) => {
+               const dx = d.target.x - d.source.x,
+                     dy = d.target.y - d.source.y,
+                     dr = Math.sqrt(dx * dx + dy * dy);
+               // Simple cubic bezier curve or straight line depending on preference
+               // For process flow, elbow or straight is often better, let's use slightly curved
+               return `M${d.source.x},${d.source.y}C${d.source.x + 50},${d.source.y} ${d.target.x - 50},${d.target.y} ${d.target.x},${d.target.y}`;
+          });
+      } else {
+          // Straight links for force layout
+          link.attr("d", (d: any) => `M${d.source.x},${d.source.y}L${d.target.x},${d.target.y}`);
+      }
 
-      node
-        .attr("transform", (d: any) => `translate(${d.x},${d.y})`);
+      node.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
     });
 
     function dragstarted(event: any, d: any) {
@@ -223,7 +284,7 @@ const Graph: React.FC<GraphProps> = ({
     return () => {
       simulation.stop();
     };
-  }, [data, width, height, onNodeClick, activeFilters, simulationKey]);
+  }, [data, width, height, onNodeClick, activeFilters, simulationKey, layoutMode]);
 
   const applySearchHighlight = (query: string) => {
     if (!svgRef.current) return;
@@ -271,29 +332,23 @@ const Graph: React.FC<GraphProps> = ({
       if (!ctx) return;
 
       const img = new Image();
-      // Use Blob to avoid URL length limits
       const svgBlob = new Blob([svgString], {type: "image/svg+xml;charset=utf-8"});
       const url = URL.createObjectURL(svgBlob);
       
       img.onload = () => {
-          // Fill white background
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
-          
           ctx.drawImage(img, 0, 0);
-          
           const a = document.createElement("a");
           a.download = `FlowSense_Graph_${new Date().toISOString().slice(0,10)}.png`;
           a.href = canvas.toDataURL("image/png");
           a.click();
-          
           URL.revokeObjectURL(url);
       };
       
       img.src = url;
   };
   
-  // Helper for color indicator in filters
   const getColor = (group: string) => {
       switch(group) {
           case 'Object': return 'bg-sf-blue';
@@ -301,10 +356,9 @@ const Graph: React.FC<GraphProps> = ({
           case 'Trigger': return 'bg-orange-500';
           case 'ValidationRule': return 'bg-red-500';
           case 'Field': return 'bg-emerald-500';
-          case 'ApexClass': return 'bg-slate-500';
-          case 'LWC': return 'bg-cyan-500';
-          case 'Aura': return 'bg-teal-500';
-          case 'Visualforce': return 'bg-indigo-600';
+          case 'Start': return 'bg-green-500';
+          case 'State': return 'bg-slate-200 border border-slate-400';
+          case 'Action': return 'bg-yellow-500';
           default: return 'bg-gray-400';
       }
   };
@@ -313,16 +367,12 @@ const Graph: React.FC<GraphProps> = ({
     <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden relative group">
        <svg ref={svgRef} width={width} height={height} className="w-full h-full cursor-grab active:cursor-grabbing bg-slate-50/30" />
        
-       {/* Zoom Instructions / Hint */}
        <div className="absolute top-2 left-2 text-[10px] text-gray-400 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-            Scroll to zoom • Drag to pan
+            Scroll to zoom • Drag to pan • Right-click nodes
        </div>
 
-       {/* Toolbar: Refresh & Filters */}
        <div className="absolute top-2 right-2 flex flex-col items-end gap-2 pointer-events-none">
-            {/* Top Row Buttons (Pointer events auto) */}
             <div className="flex gap-2 pointer-events-auto">
-                 {/* Search Toggle */}
                  <div className={`flex items-center bg-white rounded border shadow-sm transition-all overflow-hidden ${showSearch ? 'w-48 border-sf-blue' : 'w-8 border-gray-200'}`}>
                     <button 
                         onClick={() => { setShowSearch(!showSearch); if(showSearch) setSearchQuery(''); }}
@@ -340,7 +390,6 @@ const Graph: React.FC<GraphProps> = ({
                     />
                  </div>
 
-                 {/* Image Export */}
                  <button 
                      onClick={handleDownloadImage}
                      className="p-1.5 bg-white rounded border border-gray-200 shadow-sm text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors"
@@ -349,7 +398,6 @@ const Graph: React.FC<GraphProps> = ({
                      <Camera className="w-4 h-4" />
                  </button>
 
-                 {/* Report Exports */}
                  {onExport && (
                     <>
                         <button 
@@ -359,19 +407,11 @@ const Graph: React.FC<GraphProps> = ({
                         >
                             <FileText className="w-4 h-4" />
                         </button>
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); onExport('pdf'); }}
-                            className="p-1.5 bg-white rounded border border-gray-200 shadow-sm text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                            title="Print / Export Graph PDF"
-                        >
-                            <Printer className="w-4 h-4" />
-                        </button>
                     </>
                  )}
 
                  <div className="w-px bg-gray-300 mx-1 h-auto my-1"></div>
 
-                 {/* Expand Button */}
                 {onToggleExpand && (
                     <button 
                         onClick={(e) => { e.stopPropagation(); onToggleExpand(); }}

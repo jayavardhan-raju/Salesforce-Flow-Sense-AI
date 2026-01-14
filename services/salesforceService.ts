@@ -136,12 +136,17 @@ const queryTooling = async (session: SalesforceSession, query: string): Promise<
     
     if (!res.ok) {
          const text = await res.text();
+         let parsedError;
          try {
              const errJson = JSON.parse(text);
              if (Array.isArray(errJson) && errJson[0].message) {
-                 throw new Error(errJson[0].message);
+                 parsedError = errJson[0].message;
              }
          } catch(e) { /* ignore */ }
+         
+         if (parsedError) {
+             throw new Error(parsedError);
+         }
          throw new Error(`Query Failed: ${res.status} ${text.substring(0, 150)}`);
     }
     
@@ -161,12 +166,17 @@ export const executeSOQL = async (session: SalesforceSession, query: string): Pr
     
     if (!res.ok) {
          const text = await res.text();
+         let parsedError;
          try {
              const errJson = JSON.parse(text);
              if (Array.isArray(errJson) && errJson[0].message) {
-                 throw new Error(errJson[0].message);
+                 parsedError = errJson[0].message;
              }
          } catch(e) { /* ignore */ }
+         
+         if (parsedError) {
+             throw new Error(parsedError);
+         }
          throw new Error(`SOQL Error: ${text}`);
     }
     
@@ -357,38 +367,60 @@ export const fetchOrgGraphData = async (session: SalesforceSession, onProgress: 
              });
         });
 
-        // 9. Batched Field Scan
-        onProgress("Mapping Fields...");
-        const relevantObjects = objects
-            .filter((o: any) => o.QualifiedApiName.endsWith('__c') || ['Account','Contact','Opportunity','Lead','Case','User','Task','Event'].includes(o.QualifiedApiName))
-            .slice(0, 50); 
-
-        if (relevantObjects.length > 0) {
-            const objNames = relevantObjects.map((o: any) => `'${o.QualifiedApiName}'`).join(',');
-            const fieldQuery = `SELECT QualifiedApiName, Label, EntityDefinition.QualifiedApiName FROM FieldDefinition WHERE EntityDefinition.QualifiedApiName IN (${objNames}) LIMIT 1000`;
-            
-            const fieldRes = await queryTooling(session, fieldQuery);
-            const fields = fieldRes.records || [];
-            
-            fields.forEach((f: any) => {
-                 const parentObjId = f.EntityDefinition?.QualifiedApiName;
-                 if (parentObjId && nodes.find(n => n.id === parentObjId)) {
-                    if (!nodes.find(n => n.id === f.QualifiedApiName)) {
-                        nodes.push({
-                            id: f.QualifiedApiName, 
-                            label: f.Label,
-                            group: 'Field',
-                            val: 4,
-                            metadata: {
-                                apiName: f.QualifiedApiName,
-                                parentApiName: parentObjId,
-                                type: 'Field'
-                            }
-                        });
-                        links.push({ source: parentObjId, target: f.QualifiedApiName, type: 'reference' });
-                    }
-                 }
-            });
+        // 9. Enhanced Field Scan (Prioritizing Custom Fields)
+        onProgress("Mapping Custom Fields...");
+        
+        // Strategy: 
+        // 1. Get all custom fields (high priority for dependency analysis)
+        // 2. Get standard fields for core objects (Account, Opportunity, Case, Lead)
+        
+        const fieldQueries = [
+            // Custom Fields (Global)
+            "SELECT QualifiedApiName, Label, EntityDefinition.QualifiedApiName FROM FieldDefinition WHERE QualifiedApiName LIKE '%__c' LIMIT 2000",
+            // Standard Fields (Core Objects)
+            "SELECT QualifiedApiName, Label, EntityDefinition.QualifiedApiName FROM FieldDefinition WHERE EntityDefinition.QualifiedApiName IN ('Account','Contact','Opportunity','Lead','Case') AND DurableId != null LIMIT 1000"
+        ];
+        
+        for (const query of fieldQueries) {
+            try {
+                const fieldRes = await queryTooling(session, query);
+                const fields = fieldRes.records || [];
+                
+                fields.forEach((f: any) => {
+                     const parentObjId = f.EntityDefinition?.QualifiedApiName;
+                     if (parentObjId) {
+                         // Ensure parent object exists in graph node list (sometimes Triggerable scan misses abstract ones)
+                         if (!nodes.find(n => n.id === parentObjId)) {
+                             nodes.push({ 
+                                 id: parentObjId, 
+                                 label: parentObjId, 
+                                 group: 'Object', 
+                                 val: 20, 
+                                 metadata: { apiName: parentObjId, type: 'Object' } 
+                             });
+                         }
+                         
+                         // Add Field Node if not exists
+                         if (!nodes.find(n => n.id === f.QualifiedApiName)) {
+                            nodes.push({
+                                id: f.QualifiedApiName, 
+                                label: f.Label,
+                                group: 'Field',
+                                val: 4,
+                                metadata: {
+                                    apiName: f.QualifiedApiName,
+                                    parentApiName: parentObjId,
+                                    type: 'Field'
+                                }
+                            });
+                            links.push({ source: parentObjId, target: f.QualifiedApiName, type: 'reference' });
+                         }
+                     }
+                });
+            } catch(e) {
+                console.warn("Field scan partial failure", e);
+                // Continue to next query even if one fails
+            }
         }
 
     } catch (e: any) {

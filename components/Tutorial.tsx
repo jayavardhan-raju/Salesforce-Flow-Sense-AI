@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronRight, Database, MessageSquare, Activity } from 'lucide-react';
+import React from 'react';
+import { ChevronRight, Database, MessageSquare, Activity, Scan, GitMerge, Network } from 'lucide-react';
 import { TUTORIAL_STEPS } from '../constants';
 
 interface TutorialProps {
@@ -8,83 +8,53 @@ interface TutorialProps {
 }
 
 const Tutorial: React.FC<TutorialProps> = ({ onComplete, onSkip }) => {
-  const [step, setStep] = useState(0);
-
-  const icons = [Database, MessageSquare, Activity];
-  const CurrentIcon = icons[step];
-
-  const handleNext = () => {
-    if (step < TUTORIAL_STEPS.length - 1) {
-      setStep(step + 1);
-    } else {
-      onComplete();
-    }
-  };
+  
+  const getIcon = (iconName: string) => {
+      switch(iconName) {
+          case 'Scan': return Scan;
+          case 'GitMerge': return GitMerge;
+          case 'Network': return Network;
+          default: return Database;
+      }
+  }
 
   return (
-    <div className="flex flex-col h-full bg-white p-8">
+    <div className="flex flex-col h-full bg-white p-8 overflow-y-auto">
       {/* Header */}
-      <div className="mt-8 mb-8 text-center">
-        <div className="w-16 h-16 bg-sf-light rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-            <CurrentIcon className="w-8 h-8 text-sf-blue animate-bounce-subtle" />
+      <div className="mt-4 mb-8 text-center">
+        <div className="w-12 h-12 bg-sf-blue rounded-xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
+            <span className="text-white font-bold text-xl">F</span>
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">{TUTORIAL_STEPS[step].title}</h2>
-        <p className="text-gray-500 text-sm leading-relaxed px-4">{TUTORIAL_STEPS[step].description}</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome to FlowSense AI</h1>
+        <p className="text-gray-500 max-w-lg mx-auto">Your AI-powered Salesforce Architect assistant. Visualize, analyze, and optimize your org's metadata in minutes.</p>
       </div>
 
-      {/* Visual Placeholder (Mock Animation Area) */}
-      <div className="flex-1 bg-gray-50 rounded-xl border border-dashed border-gray-200 flex items-center justify-center mb-8 overflow-hidden relative group">
-        <div className="absolute inset-0 bg-gradient-to-tr from-transparent to-blue-50/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-        {step === 0 && (
-            <div className="flex flex-col gap-2 opacity-50">
-                <div className="h-2 w-32 bg-gray-200 rounded"></div>
-                <div className="h-2 w-24 bg-gray-200 rounded"></div>
-                <div className="h-2 w-28 bg-gray-200 rounded"></div>
-            </div>
-        )}
-        {step === 1 && (
-            <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 max-w-[180px]">
-                <div className="h-2 w-full bg-gray-100 rounded mb-2"></div>
-                <div className="h-2 w-2/3 bg-sf-blue/20 rounded"></div>
-            </div>
-        )}
-        {step === 2 && (
-             <div className="relative w-24 h-24">
-                <div className="absolute top-0 left-10 w-3 h-3 bg-sf-blue rounded-full"></div>
-                <div className="absolute bottom-0 left-0 w-3 h-3 bg-orange-400 rounded-sm"></div>
-                <div className="absolute bottom-0 right-0 w-3 h-3 bg-purple-500 rounded-full"></div>
-                <svg className="absolute inset-0 w-full h-full">
-                    <line x1="46" y1="6" x2="6" y2="90" stroke="#cbd5e1" strokeWidth="1" />
-                    <line x1="54" y1="6" x2="90" y2="90" stroke="#cbd5e1" strokeWidth="1" />
-                </svg>
-             </div>
-        )}
+      {/* Grid of Steps */}
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 max-w-5xl mx-auto w-full">
+        {TUTORIAL_STEPS.map((step, idx) => {
+            const Icon = getIcon(step.icon);
+            return (
+                <div key={idx} className="bg-gray-50 rounded-xl p-6 border border-gray-100 hover:border-sf-blue/30 hover:shadow-md transition-all group flex flex-col">
+                    <div className="w-12 h-12 bg-white rounded-lg border border-gray-200 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform shadow-sm">
+                        <Icon className="w-6 h-6 text-sf-blue" />
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-900 mb-2">{step.title}</h3>
+                    <p className="text-sm text-gray-600 leading-relaxed flex-1">
+                        {step.description}
+                    </p>
+                </div>
+            );
+        })}
       </div>
 
       {/* Controls */}
-      <div className="mt-auto">
-        <div className="flex justify-center space-x-2 mb-6">
-          {TUTORIAL_STEPS.map((_, idx) => (
-            <div 
-              key={idx} 
-              className={`h-1.5 rounded-full transition-all duration-300 ${idx === step ? 'w-6 bg-sf-blue' : 'w-1.5 bg-gray-200'}`}
-            />
-          ))}
-        </div>
-
+      <div className="mt-auto max-w-md mx-auto w-full">
         <button
-          onClick={handleNext}
-          className="w-full bg-sf-blue text-white font-medium py-3 rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-200 flex items-center justify-center group"
+          onClick={onComplete}
+          className="w-full bg-sf-blue text-white font-medium py-3 rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-200 flex items-center justify-center group text-lg"
         >
-          {step === TUTORIAL_STEPS.length - 1 ? "Got It, Let's Scan!" : "Next"}
-          <ChevronRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-        </button>
-        
-        <button
-          onClick={onSkip}
-          className="w-full mt-3 text-sm text-gray-400 hover:text-gray-600 font-medium py-2 transition-colors"
-        >
-          Skip Tutorial
+          Got It, Let's Scan!
+          <ChevronRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
     </div>
